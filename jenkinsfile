@@ -1,5 +1,5 @@
 pipeline {
-    agent any
+    
 
     environment {
         DOCKER_IMAGE = 'nishantnesargi123/python-app'
@@ -10,7 +10,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/your/repo.git'
+                git branch: 'main', url: 'https://github.com/nishantnesargi13/CICD-TEST.git'
             }
         }
 
