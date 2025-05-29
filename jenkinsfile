@@ -1,121 +1,52 @@
 pipeline {
-  agent {
-    docker {
-      image 'python:3.12-slim'
-      args '-v /var/run/docker.sock:/var/run/docker.sock'
-    }
-  }
+    agent any
 
-  environment {
-    DOCKER_IMAGE = 'nishantnesargi123/python-app'
-    DOCKER_TAG = 'latest'
-    SONARQUBE_ENV = 'SonarQubeServer'     // Must match Jenkins config name
-  }
-
-  options {
-    timestamps()
-  }
-
-  stages {
-
-    stage('Checkout') {
-      steps {
-        checkout scm
-      }
+    environment {
+        DOCKER_IMAGE = 'nishantnesargi123/python-app'
+        DOCKER_TAG = 'latest'
+        SONARQUBE_ENV = 'SonarQubeServer'
     }
 
-    stage('Install Dependencies') {
-      steps {
-        sh 'pip install -r requirements.txt'
-      }
-    }
-
-    stage('Run Tests') {
-      steps {
-        sh 'pytest || echo "Tests failed but continuing..."'
-      }
-    }
-
-    stage('SonarQube Analysis') {
-      environment {
-        SONAR_TOKEN = credentials('sonar-token-id')
-      }
-      steps {
-        withSonarQubeEnv("${SONARQUBE_ENV}") {
-          sh '''
-            sonar-scanner \
-              -Dsonar.projectKey=python-app \
-              -Dsonar.sources=. \
-              -Dsonar.host.url=$SONAR_HOST_URL \
-              -Dsonar.login=$SONAR_TOKEN
-          '''
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/your/repo.git'
+            }
         }
-      }
-    }
 
-    stage('Quality Gate') {
-      steps {
-        timeout(time: 2, unit: 'MINUTES') {
-          waitForQualityGate abortPipeline: true
+        stage('SonarQube Scan') {
+            steps {
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                    sh 'sonar-scanner -Dsonar.projectKey=myapp -Dsonar.sources=. -Dsonar.host.url=http://your-sonarqube-url'
+                }
+            }
         }
-      }
-    }
 
-    stage('Build Docker Image') {
-      steps {
-        sh '''
-          docker build -t $DOCKER_IMAGE:$DOCKER_TAG .
-        '''
-      }
-    }
-
-    stage('Push Docker Image') {
-      environment {
-        DOCKERHUB_CREDS = credentials('docker-cred')
-      }
-      steps {
-        sh '''
-          echo "$DOCKERHUB_CREDS_PSW" | docker login -u "$DOCKERHUB_CREDS_USR" --password-stdin
-          docker push $DOCKER_IMAGE:$DOCKER_TAG
-        '''
-      }
-    }
-
-    stage('Manual Approval') {
-      steps {
-        input message: 'Approve deployment to Kubernetes?'
-      }
-    }
-
-    stage('Deploy with Helm') {
-      environment {
-        KUBECONFIG_CREDENTIALS = credentials('kubeconfig-id')
-      }
-      steps {
-        withCredentials([file(credentialsId: 'kubeconfig-id', variable: 'KUBECONFIG_FILE')]) {
-          sh '''
-            export KUBECONFIG=$KUBECONFIG_FILE
-            helm upgrade --install myapp ./helm-chart \
-              --set image.repository=$DOCKER_IMAGE \
-              --set image.tag=$DOCKER_TAG
-          '''
+        stage('Build Docker Image') {
+            steps {
+                sh "docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} ."
+            }
         }
-      }
-    }
 
-    stage('Trigger ArgoCD Sync (Optional)') {
-      steps {
-        echo 'You can implement webhook or argocd CLI sync here.'
-      }
-    }
-  }
+        stage('Push to Docker Hub') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub-creds', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh 'echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin'
+                    sh "docker push ${DOCKER_IMAGE}:${DOCKER_TAG}"
+                }
+            }
+        }
 
-  post {
-    success {
-      echo '✅ CI/CD pipeline completed successfully.'
+        stage('Manual Approval') {
+            steps {
+                input message: "Deploy to Kubernetes?", ok: "Deploy"
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            steps {
+                sh "helm upgrade --install myapp ./helm-chart --set image.repository=${DOCKER_IMAGE},image.tag=${DOCKER_TAG}"
+            }
+        }
     }
-    failure {
-      echo '❌ CI/CD pipeline failed.'
-    }
-  }
 }
