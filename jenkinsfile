@@ -5,6 +5,7 @@ pipeline {
         DOCKER_IMAGE = 'nishantnesargi123/python-app'
         DOCKER_TAG = 'latest'
         SONARQUBE_ENV = 'SonarScanner'
+        SONAR_AUTH_TOKEN = credentials('sonar-token-id')  // Add your SonarQube token credential ID here
     }
 
     stages {
@@ -19,8 +20,23 @@ pipeline {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
                     script {
                         def scannerHome = tool 'sonarscanner'
-                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=myapp -Dsonar.sources=. -Dsonar.host.url=http://sonarqube:9000"
+                        sh """
+                          ${scannerHome}/bin/sonar-scanner \
+                            -Dsonar.projectKey=myapp \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=http://sonarqube:9000 \
+                            -Dsonar.login=${SONAR_AUTH_TOKEN}
+                        """
                     }
+                }
+            }
+        }
+
+        stage('Quality Gate') {
+            steps {
+                // Wait for SonarQube Quality Gate result, abort pipeline if it fails
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: true
                 }
             }
         }
