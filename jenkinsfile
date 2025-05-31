@@ -4,7 +4,7 @@ pipeline {
     environment {
         DOCKER_IMAGE = 'nishantnesargi123/python-app'
         DOCKER_TAG = 'latest'
-        SONARQUBE_ENV = 'SonarQubeServer' // Name used in Jenkins > Manage Jenkins > Configure System
+        SONARQUBE_ENV = 'SonarQubeServer'
     }
 
     stages {
@@ -17,9 +17,10 @@ pipeline {
         stage('SonarQube Scan') {
             steps {
                 withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    // Ensure SonarScanner is configured in Global Tool Configuration
-                    tool name: 'SonarScanner', type: 'hudson.plugins.sonar.SonarRunnerInstallation'
-                    sh 'sonar-scanner -Dsonar.projectKey=myapp -Dsonar.sources=. -Dsonar.host.url=http://localhost:9000'
+                    script {
+                        def scannerHome = tool 'sonarscanner'
+                        sh "${scannerHome}/bin/sonar-scanner -Dsonar.projectKey=myapp -Dsonar.sources=. -Dsonar.host.url=http://localhost:9000"
+                    }
                 }
             }
         }
